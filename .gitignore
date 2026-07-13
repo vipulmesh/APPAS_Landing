@@ -1,0 +1,96 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environment
+venv/
+.venv/
+.env/
+.envrc
+
+# Distribution / Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# ==========================
+# VS Code
+# ==========================
+.vscode/
+
+# ==========================
+# PyCharm
+# ==========================
+.idea/
+
+# ==========================
+# macOS
+# ==========================
+.DS_Store
+
+# ==========================
+# Linux
+# ==========================
+*~
+
+# ==========================
+# Windows
+# ==========================
+Thumbs.db
+Desktop.ini
+
+# ==========================
+# OpenCV Generated Files
+# ==========================
+*.avi
+*.mp4
+*.mov
+*.mkv
+
+# Images (Uncomment if you don't want to upload them)
+# *.jpg
+# *.jpeg
+# *.png
+
+# ==========================
+# Temporary Files
+# ==========================
+tmp/
+temp/
+*.tmp
+
+# ==========================
+# Model Files (Optional)
+# Uncomment if using ML models
+# ==========================
+# *.pt
+# *.pth
+# *.onnx
+# *.h5
+# *.pkl
+
+# ==========================
+# Environment Variables
+# ==========================
+.env
+
+# ==========================
+# Cache
+# ==========================
+.cache/
