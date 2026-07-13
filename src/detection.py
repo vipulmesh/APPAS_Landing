@@ -14,9 +14,11 @@ def get_contour_center(contour):
 
 
 def detect_landing_marker(frame, binary_frame):
-#    contours, _ = cv2.findContours(binary_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     frame_area = frame.shape[0] * frame.shape[1]
     max_allowed_area = frame_area * MAX_CONTOUR_AREA_RATIO
+
+    contour_result = cv2.findContours(binary_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = contour_result[0] if len(contour_result) == 2 else contour_result[1]
 
     candidates = []
     for contour in contours:
