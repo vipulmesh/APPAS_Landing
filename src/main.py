@@ -4,11 +4,13 @@ import cv2
 
 try:
     from config import CAMERA_INDEX, DISPLAY_WINDOW_NAME, FRAME_HEIGHT, FRAME_WIDTH, MASK_WINDOW_NAME
+    from alignment import get_alignment_guidance, update_docking_state
     from detection import detect_landing_marker
     from preprocessing import preprocess_frame
     from utils import draw_detection
 except ImportError:
     from .config import CAMERA_INDEX, DISPLAY_WINDOW_NAME, FRAME_HEIGHT, FRAME_WIDTH, MASK_WINDOW_NAME
+    from .alignment import get_alignment_guidance, update_docking_state
     from .detection import detect_landing_marker
     from .preprocessing import preprocess_frame
     from .utils import draw_detection
@@ -23,6 +25,8 @@ def main():
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
 
     previous_time = time.perf_counter()
+    docking_state = "Searching"
+    stable_alignment_frames = 0
 
     try:
         while True:
@@ -33,22 +37,34 @@ def main():
 
             processed = preprocess_frame(frame)
             detection, _ = detect_landing_marker(frame, processed)
-            annotated_frame = draw_detection(frame, detection)
+
+            if detection is None:
+                alignment = {
+                    "status": "Searching",
+                    "instructions": [],
+                    "aligned": False,
+                }
+                docking_state = "Searching"
+                stable_alignment_frames = 0
+            else:
+                alignment = get_alignment_guidance(detection["offset_x"], detection["offset_y"])
+                docking_state, stable_alignment_frames = update_docking_state(
+                    detection,
+                    alignment,
+                    stable_alignment_frames,
+                )
 
             current_time = time.perf_counter()
             elapsed_time = current_time - previous_time
             fps = 1.0 / elapsed_time if elapsed_time > 0 else 0.0
             previous_time = current_time
 
-            cv2.putText(
-                annotated_frame,
-                f"FPS: {fps:.2f}",
-                (20, 75),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 255),
-                2,
-                cv2.LINE_AA,
+            annotated_frame = draw_detection(
+                frame,
+                detection,
+                alignment=alignment,
+                docking_state=docking_state,
+                fps=fps,
             )
 
             processed_display = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
