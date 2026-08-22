@@ -4,6 +4,17 @@ CAMERA_INDEX = 0
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
 
+# ArUco landing-marker settings.  These image-space tolerances are pixels,
+# not physical distances.
+ARUCO_DICTIONARY = "DICT_4X4_50"
+TARGET_MARKER_ID = 23
+ARUCO_MARKER_SIZE = 600
+ARUCO_BORDER_BITS = 1
+ARUCO_MARKER_MARGIN = 40
+ARUCO_X_TOLERANCE = 20
+ARUCO_Y_TOLERANCE = 20
+ARUCO_WINDOW_NAME = "ArUco Landing Marker Detection"
+
 DISPLAY_WINDOW_NAME = "Landing Marker Detection"
 MASK_WINDOW_NAME = "Processed Mask"
 
