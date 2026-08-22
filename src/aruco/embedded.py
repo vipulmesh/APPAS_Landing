@@ -1,8 +1,4 @@
-"""Experimental e-ArUco construction and interpretation utilities.
-
-An e-ArUco replaces the *central black encoding cell* of a 7x7 outer marker
-with a complete smaller 7x7 marker.  It is deliberately not an image overlay.
-"""
+"""Experimental e-ArUco rendering and specialized outer-marker decoding."""
 
 from __future__ import annotations
 
@@ -34,6 +30,14 @@ class EmbeddedDetection:
     active: DetectedMarker | None
     active_kind: str | None
     range_state: str
+
+
+@dataclass(frozen=True)
+class MarkerQuality:
+    area: float
+    perimeter: float
+    module_pixels: float
+    geometry_valid: bool
 
 
 def _dictionary(dictionary_name: str):
@@ -97,15 +101,26 @@ def validate_embedded_configuration(
     )
 
 
-def validate_physical_dimensions(outer_size_mm: float, inner_size_mm: float, total_modules: int = 9) -> float:
-    """Validate square print dimensions against the one-central-cell geometry."""
+def validate_physical_dimensions(outer_size_mm: float, inner_size_mm: float, expected_ratio: float) -> float:
+    """Validate positive print dimensions against the configured marker ratio."""
     if outer_size_mm <= 0 or inner_size_mm <= 0:
         raise ValueError("Outer and inner physical sizes must be positive.")
     ratio = inner_size_mm / outer_size_mm
-    required_ratio = 1.0 / total_modules
-    if not np.isclose(ratio, required_ratio):
-        raise ValueError(f"Inner/outer physical size ratio must be {required_ratio:.6f}; received {ratio:.6f}.")
+    if not np.isclose(ratio, expected_ratio):
+        raise ValueError(f"Inner/outer physical size ratio must be {expected_ratio:.6f}; received {ratio:.6f}.")
     return ratio
+
+
+def _layout(marker_side: int, total_modules: int, inner_ratio: float, quiet_ratio: float, min_module_pixels: int) -> tuple[int, int, int]:
+    if not 0.10 <= inner_ratio <= 0.30 or quiet_ratio < 0:
+        raise ValueError("Inner ratio must be 0.10–0.30 and quiet-zone ratio must be non-negative.")
+    inner_side = int(marker_side * inner_ratio) // total_modules * total_modules
+    quiet = int(round(marker_side * quiet_ratio))
+    if inner_side < total_modules * min_module_pixels:
+        raise ValueError(f"Inner module size is below the required {min_module_pixels} pixels.")
+    if inner_side + (2 * quiet) >= marker_side:
+        raise ValueError("Inner marker and quiet zone do not fit inside the outer marker.")
+    return inner_side, quiet, (marker_side - inner_side) // 2
 
 
 def generate_embedded_marker(
@@ -116,7 +131,9 @@ def generate_embedded_marker(
     output_path: str | Path,
     min_inner_black_ratio: float = 0.5,
     margin: int = 0,
-    inner_ratio: float | None = None,
+    inner_ratio: float = 0.20,
+    quiet_ratio: float = 1.0 / 60.0,
+    min_module_pixels: int = 10,
     outer_size_mm: float | None = None,
     inner_size_mm: float | None = None,
 ) -> tuple[Path, EmbeddedMarkerDiagnostics]:
@@ -124,16 +141,10 @@ def generate_embedded_marker(
     dictionary = _dictionary(dictionary_name)
     marker_size = int(dictionary.markerSize)
     total_modules = marker_size + 2
-    required_ratio = 1.0 / total_modules
-    if inner_ratio is not None and not np.isclose(inner_ratio, required_ratio):
-        raise ValueError(
-            f"A complete inner {marker_size}x{marker_size} marker must occupy one outer cell: "
-            f"inner ratio must be {required_ratio:.6f}."
-        )
     if (outer_size_mm is None) != (inner_size_mm is None):
         raise ValueError("Provide both outer and inner physical sizes, or neither.")
     if outer_size_mm is not None:
-        validate_physical_dimensions(outer_size_mm, inner_size_mm, total_modules)
+        validate_physical_dimensions(outer_size_mm, inner_size_mm, inner_ratio)
     if output_size <= 2 * margin or margin < 0:
         raise ValueError("Output size must exceed twice the non-negative margin.")
     diagnostics = validate_embedded_configuration(dictionary_name, outer_id, inner_id, min_inner_black_ratio)
@@ -145,16 +156,14 @@ def generate_embedded_marker(
             f"Inner ID {inner_id} black-cell ratio is {diagnostics.inner_black_ratio:.2f}, below {min_inner_black_ratio:.2f}."
         )
 
-    # Work in an exact module lattice: each outer cell is a full inner marker.
-    lattice_side = total_modules * total_modules
-    outer = _marker_image(dictionary, outer_id, lattice_side)
-    inner = _marker_image(dictionary, inner_id, total_modules)
-    center_cell = total_modules // 2
-    start = center_cell * total_modules
-    outer[start : start + total_modules, start : start + total_modules] = inner
-
     marker_side = output_size - 2 * margin
-    rendered = cv2.resize(outer, (marker_side, marker_side), interpolation=cv2.INTER_NEAREST)
+    inner_side, quiet, start = _layout(marker_side, total_modules, inner_ratio, quiet_ratio, min_module_pixels)
+    # Both markers are natively rendered at their final module resolution. The
+    # white quiet zone is part of the final image, so the inner is directly
+    # detectable without ROI padding or fabricated coordinates.
+    rendered = _marker_image(dictionary, outer_id, marker_side)
+    rendered[start - quiet : start + inner_side + quiet, start - quiet : start + inner_side + quiet] = 255
+    rendered[start : start + inner_side, start : start + inner_side] = _marker_image(dictionary, inner_id, inner_side)
     image = np.full((output_size, output_size), 255, dtype=np.uint8)
     image[margin : margin + marker_side, margin : margin + marker_side] = rendered
     path = Path(output_path)
@@ -162,6 +171,23 @@ def generate_embedded_marker(
     if not cv2.imwrite(str(path), image):
         raise OSError(f"Could not write embedded marker image to {path}")
     return path, diagnostics
+
+
+def generate_standalone_inner_marker(
+    dictionary_name: str, inner_id: int, output_size: int, output_path: str | Path,
+    inner_ratio: float = 0.20, min_module_pixels: int = 10,
+) -> Path:
+    """Generate a centered inner marker with a real white quiet zone for diagnostics."""
+    dictionary = _dictionary(dictionary_name)
+    total_modules = int(dictionary.markerSize) + 2
+    inner_side, _, start = _layout(output_size, total_modules, inner_ratio, 0, min_module_pixels)
+    image = np.full((output_size, output_size), 255, dtype=np.uint8)
+    image[start : start + inner_side, start : start + inner_side] = _marker_image(dictionary, inner_id, inner_side)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(path), image):
+        raise OSError(f"Could not write standalone inner marker image to {path}")
+    return path
 
 
 def interpret_embedded_markers(
@@ -183,35 +209,50 @@ def interpret_embedded_markers(
 
 
 def detect_embedded_markers(
-    frame: np.ndarray, detector: ArucoDetector, outer_id: int, inner_id: int
+    frame: np.ndarray, detector: ArucoDetector, outer_id: int, inner_id: int,
+    inner_ratio: float = 0.20, quiet_ratio: float = 1.0 / 60.0, min_module_pixels: int = 10,
 ) -> list[DetectedMarker]:
-    """Detect the outer marker, then rectify its central cell to inspect the inner.
+    """Detect the inner directly and recover outer candidates with a known mask.
 
-    The same normal ``ArucoDetector`` is reused.  The crop supplies the white
-    quiet zone that an inner marker embedded in a black outer cell cannot have
-    in the complete image, while retaining the outer's unmodified black bit.
+    The inner ID is accepted only if the unmodified full-frame OpenCV detector
+    finds it. The specialized outer decoder uses rejected quadrilaterals,
+    rectifies actual image pixels, restores the intentionally embedded central
+    region from the configured outer code, then re-runs the same detector.
     """
     markers = detector.detect(frame)
-    outer = detector.select_target(markers, outer_id)
-    if outer is None or detector.select_target(markers, inner_id) is not None:
+    if detector.select_target(markers, outer_id) is not None:
         return markers
     total_modules = int(detector.dictionary.markerSize) + 2
-    canonical_side = total_modules * 100
+    canonical_side = total_modules * 120
+    inner_side, quiet, start = _layout(canonical_side, total_modules, inner_ratio, quiet_ratio, min_module_pixels)
+    reference = _marker_image(detector.dictionary, outer_id, canonical_side)
     destination = np.float32([
         [0, 0], [canonical_side - 1, 0], [canonical_side - 1, canonical_side - 1], [0, canonical_side - 1]
     ])
-    transform = cv2.getPerspectiveTransform(outer.corners.astype(np.float32), destination)
-    rectified = cv2.warpPerspective(frame, transform, (canonical_side, canonical_side), borderValue=(255, 255, 255))
-    cell_side = canonical_side // total_modules
-    start = (total_modules // 2) * cell_side
-    central_cell = rectified[start : start + cell_side, start : start + cell_side]
-    padding = cell_side // 2
-    inner_input = cv2.copyMakeBorder(central_cell, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=(255, 255, 255))
-    inner = detector.select_target(detector.detect(inner_input), inner_id)
-    if inner is None:
-        return markers
-    canonical_corners = inner.corners - np.array([padding - start, padding - start], dtype=np.float32)
-    inverse_transform = cv2.getPerspectiveTransform(destination, outer.corners.astype(np.float32))
-    frame_corners = cv2.perspectiveTransform(canonical_corners.reshape(1, 4, 2).astype(np.float32), inverse_transform)[0]
-    embedded_inner = DetectedMarker(inner_id, frame_corners, marker_center(frame_corners))
-    return [*markers, embedded_inner]
+    grayscale = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
+    for candidate in sorted(detector.rejected_candidates(frame), key=lambda points: abs(cv2.contourArea(points.astype(np.float32))), reverse=True):
+        if abs(cv2.contourArea(candidate.astype(np.float32))) < 400:
+            continue
+        transform = cv2.getPerspectiveTransform(candidate.astype(np.float32), destination)
+        rectified = cv2.warpPerspective(grayscale, transform, (canonical_side, canonical_side), flags=cv2.INTER_NEAREST, borderValue=255)
+        restored = rectified.copy()
+        restored[start - quiet : start + inner_side + quiet, start - quiet : start + inner_side + quiet] = reference[start - quiet : start + inner_side + quiet, start - quiet : start + inner_side + quiet]
+        padding = max(20, canonical_side // 18)
+        recovered = detector.select_target(detector.detect(cv2.copyMakeBorder(restored, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=(255, 255, 255))), outer_id)
+        if recovered is None:
+            continue
+        canonical_corners = recovered.corners - padding
+        inverse_transform = cv2.getPerspectiveTransform(destination, candidate.astype(np.float32))
+        frame_corners = cv2.perspectiveTransform(canonical_corners.reshape(1, 4, 2).astype(np.float32), inverse_transform)[0]
+        return [*markers, DetectedMarker(outer_id, frame_corners, marker_center(frame_corners))]
+    return markers
+
+
+def marker_quality(marker: DetectedMarker, module_count: int = 9) -> MarkerQuality:
+    """Return geometric diagnostics derived from real detected corners."""
+    corners = marker.corners.astype(np.float32)
+    area = abs(float(cv2.contourArea(corners)))
+    perimeter = float(cv2.arcLength(corners, True))
+    edges = [float(np.linalg.norm(corners[(index + 1) % 4] - corners[index])) for index in range(4)]
+    aspect = max(edges) / min(edges) if min(edges) else float("inf")
+    return MarkerQuality(area, perimeter, min(edges) / module_count, area > 0 and aspect <= 1.4)

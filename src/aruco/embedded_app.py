@@ -9,12 +9,14 @@ import cv2
 try:
     from config import (
         ARUCO_X_TOLERANCE, ARUCO_Y_TOLERANCE, CAMERA_INDEX, EARUCO_BOTH_VISIBLE_POLICY,
-        EARUCO_DICTIONARY, EARUCO_INNER_ID, EARUCO_OUTER_ID, FRAME_HEIGHT, FRAME_WIDTH,
+        EARUCO_DICTIONARY, EARUCO_INNER_ID, EARUCO_INNER_QUIET_RATIO, EARUCO_INNER_RATIO,
+        EARUCO_MIN_MODULE_PIXELS, EARUCO_OUTER_ID, FRAME_HEIGHT, FRAME_WIDTH,
     )
 except ImportError:
     from ..config import (
         ARUCO_X_TOLERANCE, ARUCO_Y_TOLERANCE, CAMERA_INDEX, EARUCO_BOTH_VISIBLE_POLICY,
-        EARUCO_DICTIONARY, EARUCO_INNER_ID, EARUCO_OUTER_ID, FRAME_HEIGHT, FRAME_WIDTH,
+        EARUCO_DICTIONARY, EARUCO_INNER_ID, EARUCO_INNER_QUIET_RATIO, EARUCO_INNER_RATIO,
+        EARUCO_MIN_MODULE_PIXELS, EARUCO_OUTER_ID, FRAME_HEIGHT, FRAME_WIDTH,
     )
 
 from .detector import ArucoDetector
@@ -38,7 +40,7 @@ def run() -> None:
             if not success:
                 print("Could not read a camera frame; stopping e-ArUco detector.")
                 break
-            markers = detect_embedded_markers(frame, detector, EARUCO_OUTER_ID, EARUCO_INNER_ID)
+            markers = detect_embedded_markers(frame, detector, EARUCO_OUTER_ID, EARUCO_INNER_ID, EARUCO_INNER_RATIO, EARUCO_INNER_QUIET_RATIO, EARUCO_MIN_MODULE_PIXELS)
             detected = interpret_embedded_markers(markers, EARUCO_OUTER_ID, EARUCO_INNER_ID, EARUCO_BOTH_VISIBLE_POLICY)
             image_center = frame_center(frame.shape[1], frame.shape[0])
             alignment = None

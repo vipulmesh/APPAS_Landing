@@ -45,16 +45,23 @@ class ArucoDetector:
         """Detect all ArUco markers in a BGR or grayscale numpy frame."""
         if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
             raise ValueError("A non-empty numpy image frame is required.")
-        if self._modern_detector is not None:
-            corners, ids, _ = self._modern_detector.detectMarkers(frame)
-        else:
-            corners, ids, _ = cv2.aruco.detectMarkers(frame, self.dictionary, parameters=self._parameters)
+        corners, ids, _ = self._detect_raw(frame)
         if ids is None:
             return []
         return [
             DetectedMarker(int(marker_id), np.asarray(corner).reshape(4, 2), marker_center(corner))
             for marker_id, corner in zip(ids.flatten(), corners)
         ]
+
+    def rejected_candidates(self, frame: np.ndarray) -> list[np.ndarray]:
+        """Return rejected quadrilateral candidates for specialized diagnostics."""
+        _, _, rejected = self._detect_raw(frame)
+        return [np.asarray(candidate).reshape(4, 2) for candidate in rejected]
+
+    def _detect_raw(self, frame: np.ndarray):
+        if self._modern_detector is not None:
+            return self._modern_detector.detectMarkers(frame)
+        return cv2.aruco.detectMarkers(frame, self.dictionary, parameters=self._parameters)
 
     @staticmethod
     def select_target(markers: list[DetectedMarker], target_marker_id: int) -> DetectedMarker | None:

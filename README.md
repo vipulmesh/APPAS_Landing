@@ -147,7 +147,8 @@ CLOSE RANGE: camera → inner marker → fine alignment
 The outer ID must have a black central encoding cell. The generator validates
 this before writing a file and checks the inner marker's black-cell ratio. The
 default IDs (`outer=25`, `inner=45`) use `DICT_7X7_100`, are different, and
-pass these checks. The 450 mm / 50 mm example dimensions are configuration
+pass these checks. The default physical layout is 450 mm / 90 mm (ratio 0.20)
+to keep the inner marker readily detectable; it is configurable. Dimensions are
 metadata; this code still reports only pixel alignment, never physical pose.
 
 Generate and test the default e-ArUco marker:
@@ -156,11 +157,14 @@ Generate and test the default e-ArUco marker:
 python scripts/generate_earuco.py
 ```
 
-It writes `markers/generated/earuco_outer25_inner45.png` and prints the
-OpenCV-detected IDs, corners, and centres. The complete image preserves the
-outer black bit; to detect the embedded inner marker, the same normal detector
-rectifies the detected outer marker's central cell and supplies the necessary
-quiet zone before detection. This is exposed as `detect_embedded_markers()`.
+It writes `markers/generated/earuco_outer25_inner45.png`, an independently
+detectable `earuco_inner_debug.png`, and `earuco_debug.png` with detected
+corners and centres. The final image has a real white quiet zone around the
+inner marker, so the normal full-frame detector detects the inner ID directly.
+The specialized e-ArUco outer decoder then rectifies actual rejected outer
+candidates, restores only the intentionally embedded central region from the
+configured outer code, and runs the same OpenCV detector. This is exposed as
+`detect_embedded_markers()`; it does not fabricate inner detections.
 
 `interpret_embedded_markers()` selects outer-only, inner-only, both-visible,
 or no-marker states. Set `EARUCO_BOTH_VISIBLE_POLICY` to `outer` or `inner` to
