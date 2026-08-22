@@ -15,6 +15,18 @@ ARUCO_X_TOLERANCE = 20
 ARUCO_Y_TOLERANCE = 20
 ARUCO_WINDOW_NAME = "ArUco Landing Marker Detection"
 
+# Experimental embedded ArUco (e-ArUco) settings.  A complete 7x7 marker,
+# including its one-cell border, occupies one central outer encoding cell.
+EARUCO_DICTIONARY = "DICT_7X7_100"
+EARUCO_OUTER_ID = 25  # Selected because its central DICT_7X7_100 cell is black.
+EARUCO_INNER_ID = 45
+EARUCO_OUTPUT_SIZE = 900
+EARUCO_MARGIN = 45
+EARUCO_OUTER_SIZE_MM = 450.0
+EARUCO_INNER_SIZE_MM = 50.0
+EARUCO_MIN_INNER_BLACK_RATIO = 0.50
+EARUCO_BOTH_VISIBLE_POLICY = "outer"  # "outer" for rough, "inner" for fine alignment.
+
 DISPLAY_WINDOW_NAME = "Landing Marker Detection"
 MASK_WINDOW_NAME = "Processed Mask"
 

@@ -131,6 +131,45 @@ dependency. Today the application supplies frames from `cv2.VideoCapture`;
 later a Gazebo camera can supply its numpy frame to the same detector without
 duplicating perception logic.
 
+## Embedded ArUco (experimental)
+
+An e-ArUco marker places a smaller 7×7 ArUco marker inside the central black
+encoding cell of a larger 7×7 marker. This is a geometry-aligned embedded
+construction, not a collage of independent PNGs. The outer marker supports
+rough alignment at long/medium range; once only the inner marker is visible it
+supports fine image-space alignment at close range.
+
+```text
+LONG RANGE:  camera → outer marker → rough alignment
+CLOSE RANGE: camera → inner marker → fine alignment
+```
+
+The outer ID must have a black central encoding cell. The generator validates
+this before writing a file and checks the inner marker's black-cell ratio. The
+default IDs (`outer=25`, `inner=45`) use `DICT_7X7_100`, are different, and
+pass these checks. The 450 mm / 50 mm example dimensions are configuration
+metadata; this code still reports only pixel alignment, never physical pose.
+
+Generate and test the default e-ArUco marker:
+
+```bash
+python scripts/generate_earuco.py
+```
+
+It writes `markers/generated/earuco_outer25_inner45.png` and prints the
+OpenCV-detected IDs, corners, and centres. The complete image preserves the
+outer black bit; to detect the embedded inner marker, the same normal detector
+rectifies the detected outer marker's central cell and supplies the necessary
+quiet zone before detection. This is exposed as `detect_embedded_markers()`.
+
+`interpret_embedded_markers()` selects outer-only, inner-only, both-visible,
+or no-marker states. Set `EARUCO_BOTH_VISIBLE_POLICY` to `outer` or `inner` to
+choose the active perception marker when both are visible. The separate
+embedded visualization annotates these boundaries and the selected marker:
+
+```bash
+python scripts/run_earuco_detector.py
+```
+
 Not implemented yet: calibration, pose estimation (`solvePnP`), physical
-distance estimation, Gazebo integration, UAV control, autonomous landing, and
-e-ArUco.
+distance estimation, Gazebo integration, UAV control, and autonomous landing.
